@@ -23,7 +23,7 @@
 Operand1:        DS.B   1           ; Contador, DS, Define store 
 Operand2:        DS.B   1 
 Contador3:        DS.B   1
-Contador4:        DS.B   1
+signoNegativo:		DS.B 1
 Result:			DS.B	1
 ;
 ; Sección para definir variables en memoria RAM, por fuera de la página cero
@@ -48,17 +48,18 @@ Result:			DS.B	1
 		CLR Operand1 ; clear reserved memory positions
 		CLR Operand2
 		CLR Contador3
-		CLR Contador4
+		CLR signoNegativo
+		CLR Result
 		MOV #$00,PTAD ; byte with the start (bit 0),Capture_Operand1 (bit 1) and Capture_Operand2 (bit2) signals 
-		MOV #$00,PTADD ; set as output port
+		MOV #$00,PTADD ; set as input port
 		MOV #$00,PTBD ; port assigned to Operand value
-		MOV #$00, PTBDD ; set as output port
+		MOV #$00, PTBDD ; set as input port
 		MOV #$00,PTCD ; port assigned to the Operation name
-		MOV #$00, PTCDD; outport port
+		MOV #$00, PTCDD; set as input port
 		MOV #$00,PTDD; port to show the result
-		MOV #$FF, PTDDD; output port
+		MOV #$FF, PTDDD; set as output port
 		MOV #$00,PTED; port assigned to flags
-		MOV #$FF, PTEDD; output  port
+		MOV #$FF, PTEDD; set as output port
 		
 		
 ; program body
@@ -130,18 +131,60 @@ OpType:
 subtract:
 multiplication:
 division:
+			LDA		Operand1
+			EOR		Operand2
+			AND		#%10000000
+			BEQ		empezarDiv
+			MOV		#1,signoNegativo
+empezarDiv:
+			BRCLR	7,Operand1,comprobar2
+			NEG		Operand1
+comprobar2:
+			BRCLR	7,Operand2,seguirDiv
+			NEG		Operand2
+seguirDiv:
+			LDX		Operand2		
+			LDA		Operand1
+			CMP		#-128
+			BNE		dividir
+			CPX		#-1
+			BNE		dividir
+			BSET	0,PTED ; send a flag to the LSB of the port noticing about overflow error
+			BRA 	End_Program ; it is temporal
+dividir:
+			DIV
+			STA		Result	
+			TPA
+			AND		#%00000001
+			BEQ		divisionCorrecta
+			BSET	1,PTED ; send a flag to the LSB of the port noticing about zero division 
+			BRA 	End_Program ; it is temporal
+			
+divisionCorrecta:
+			MOV		Result,PTDD
+			BCLR	0,PTED
+			BRA 	End_Program ; it is temporal
+			
+					
+			
+
+			
+
+			
+			
+			
+			
 sum:
 			LDA		Operand1
 			ADD		Operand2; Add to check the overflow flag only
 			;flag for checking status
-			BLT		verificarNegativo
+			BLT		verificarNegativo ; N xor V = 1, desechar el caso donde N =1 y V = 0
 			BPL		operacionCorrecta
 			BSET	0,PTED ; send a flag to the LSB of the port noticing about overflow error (because of big positive numbers)
 			BRA 	End_Program ; it is temporal
 					
 verificarNegativo:
 			BMI		operacionCorrecta
-			
 			BSET	0,PTED ; send a flag to the LSB of the port noticing about overflow error (because of big negative numbers)
 			BRA 	End_Program ; it is temporal
 operacionCorrecta:
@@ -152,10 +195,11 @@ operacionCorrecta:
 			BCLR	0,PTED;
 			BRA 	End_Program ; it is temporal
 			
-			
+
 			
 			
 End_Program:
+
 			BRA 	End_Program
 
 ;*                 Interrupt Vectors                          *
