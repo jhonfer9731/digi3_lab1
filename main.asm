@@ -24,13 +24,13 @@ Operand1:        DS.B   1           ; Contador, DS, Define store
 Operand2:        DS.B   1 
 Contador3:        DS.B   1
 signoNegativo:		DS.B 1
-Result:			DS.B	1
+Result:			DS.W	1
 ;
-; Sección para definir variables en memoria RAM, por fuera de la página cero
+; Secciï¿½n para definir variables en memoria RAM, por fuera de la pï¿½gina cero
 ;
             ;ORG    RAMStart
 
-; Sección de código del programa. 
+; Secciï¿½n de cï¿½digo del programa. 
 		ORG   ROMStart
  _Startup:
 		; Apagar WatchDOG
@@ -60,8 +60,6 @@ Result:			DS.B	1
 		MOV #$FF, PTDDD; set as output port
 		MOV #$00,PTED; port assigned to flags
 		MOV #$FF, PTEDD; set as output port
-		
-		
 ; program body
 
 Inicio: 
@@ -129,50 +127,86 @@ OpType:
 			
 
 subtract:
-multiplication:
-division:
-			LDA		Operand1
-			EOR		Operand2
-			AND		#%10000000
-			BEQ		empezarDiv
-			MOV		#1,signoNegativo
-empezarDiv:
-			BRCLR	7,Operand1,comprobar2
-			NEG		Operand1
-comprobar2:
-			BRCLR	7,Operand2,seguirDiv
-			NEG		Operand2
-seguirDiv:
-			LDX		Operand2		
-			LDA		Operand1
-			CMP		#-128
-			BNE		dividir
-			CPX		#-1
-			BNE		dividir
+			LDA		Operand1	
+			SUB		Operand2		; Subtract Op1-Op2
+			TAX						;Save value of A in X
+			TPA						;Load A with the status register
+			AND		#%10000000		;Mask for Overflow bit in CCR
+			BMI		SUB_Overflow	;if z=1 exit
+			STX		Result			; if not, store the result of the subtraction
+			MOV		Result,PTDD		
+			BCLR	0,PTED;			;flag: no overflow error 
+			JMP 	End_Program ; it is temporal
+
+SUB_Overflow:
+			CLR 	Result
 			BSET	0,PTED ; send a flag to the LSB of the port noticing about overflow error
-			BRA 	End_Program ; it is temporal
+			JMP 	End_Program ;
+
+
+
+multiplication:
+			CLR Contador3
+			LDA		Operand1
+			BMI		change_sign1
+			BRA		go_mult
+change_sign1:
+			NEGA
+			INC 	Contador3
+go_mult:	
+			LDX 	Operand2
+			BMI		change_sign2
+			BRA		next_mult		
+change_sign2:
+			NEGX
+			INC		Contador3
+	
+next_mult:	BRSET	0,Contador3,sign_mult
+			MOV		#0,signoNegativo
+cont_mult:	MUL							;Multiply X * A
+			PSHX						; X to stack
+			PULH						;Load H with X (through stack)
+			TAX							;X<--A
+			STHX	Result				; save result
+			BCLR	0,PTED				; no flags
+			BRA 	End_Program
+sign_mult:
+			MOV		#1,signoNegativo
+			BRA cont_mult
+
+
+
+division:
+					CLRH
+					LDA		Operand2
+					BNE		Operando2Dif0
+					BSET	1,PTED ; send a flag to the LSB of the port noticing about zero division 
+					BRA 	End_Program ; it is temporal
+Operando2Dif0:		EOR		Operand1
+					AND		#%10000000
+					BEQ		empezarDiv
+					MOV		#1,signoNegativo
+empezarDiv:
+					BRCLR	7,Operand1,comprobar2
+					NEG		Operand1
+comprobar2:
+					BRCLR	7,Operand2,seguirDiv
+					NEG		Operand2
+seguirDiv:
+					LDX		Operand2		
+					LDA		Operand1
+					CMP		#-128  ; verificar el caso contrario donde es -1/-128
+					BNE		dividir
+					CPX		#-1
+					BNE		dividir
+					BSET	0,PTED ; send a flag to the LSB of the port noticing about overflow error
+					BRA 	End_Program ; it is temporal
 dividir:
-			DIV
-			STA		Result	
-			TPA
-			AND		#%00000001
-			BEQ		divisionCorrecta
-			BSET	1,PTED ; send a flag to the LSB of the port noticing about zero division 
-			BRA 	End_Program ; it is temporal
-			
-divisionCorrecta:
-			MOV		Result,PTDD
-			BCLR	0,PTED
-			BRA 	End_Program ; it is temporal
-			
-					
-			
-
-			
-
-			
-			
-			
+					DIV
+					STA		Result	
+					MOV		Result,PTDD
+					BCLR	0,PTED
+					BRA 	End_Program ; it is temporal				
 			
 sum:
 			LDA		Operand1
