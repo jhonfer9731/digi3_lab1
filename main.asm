@@ -168,6 +168,7 @@ cont_mult:	MUL							;Multiply X * A
 			PULH						;Load H with X (through stack)
 			TAX							;X<--A
 			STHX	Result				; save result
+			MOV		Result,PTDD			
 			BCLR	0,PTED				; no flags
 			BRA 	End_Program
 sign_mult:
