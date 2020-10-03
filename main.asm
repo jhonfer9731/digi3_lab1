@@ -24,7 +24,8 @@ Operand1:        DS.B   1           ; Contador, DS, Define store
 Operand2:        DS.B   1 
 Contador3:        DS.B   1
 signoNegativo:		DS.B 1
-Result:			DS.W	1
+Result:			DS.B	1
+decimal1:		DS.W	1
 ;
 ; Secci�n para definir variables en memoria RAM, por fuera de la p�gina cero
 ;
@@ -50,6 +51,7 @@ Result:			DS.W	1
 		CLR Contador3
 		CLR signoNegativo
 		CLR Result
+		CLR decimal1
 		MOV #$00,PTAD ; byte with the start (bit 0),Capture_Operand1 (bit 1) and Capture_Operand2 (bit2) signals 
 		MOV #$00,PTADD ; set as input port
 		MOV #$00,PTBD ; port assigned to Operand value
@@ -123,7 +125,7 @@ OpType:
 			BEQ		multiplication
 			CMP		#1
 			BEQ		subtract
-			BRA		sum
+			JMP		sum
 			
 
 subtract:
@@ -177,26 +179,34 @@ sign_mult:
 
 
 
-division:
+division:			; it verifies if there are special cases
 					CLRH
 					LDA		Operand2
-					BNE		Operando2Dif0
-					BSET	1,PTED ; send a flag to the LSB of the port noticing about zero division 
+					CMP		#1
+					BNE		verificarSi0
+					MOV		Operand1,Result
+					MOV		Operand1,PTDD
 					BRA 	End_Program ; it is temporal
-Operando2Dif0:		EOR		Operand1
+verificarSi0:		CMP		#0
+					BNE		OperandoSinE
+					BSET	1,PTED ; send a flag to the LSB of the port noticing about zero division
+					BRA 	End_Program ; it is temporal
+					
+				; it executes if there is no special cases
+OperandoSinE:		EOR		Operand1
 					AND		#%10000000
-					BEQ		empezarDiv
+					BEQ		empezarDiv; Branch if the signs are equal in both operands
 					MOV		#1,signoNegativo
 empezarDiv:
-					BRCLR	7,Operand1,comprobar2
-					NEG		Operand1
+					BRCLR	7,Operand1,comprobar2 
+					NEG		Operand1		; Change the operand to positive number if it is negative
 comprobar2:
 					BRCLR	7,Operand2,seguirDiv
-					NEG		Operand2
+					NEG		Operand2		; Change the operand to positive number if it is negative
 seguirDiv:
-					LDX		Operand2		
-					LDA		Operand1
-					CMP		#-128  ; verificar el caso contrario donde es -1/-128
+					LDX		Operand2  	;Charge operand2 to X
+					LDA		Operand1	;Charge operand2 to A
+					CMP		#-128  ; verify the case of -128/-1
 					BNE		dividir
 					CPX		#-1
 					BNE		dividir
@@ -204,10 +214,28 @@ seguirDiv:
 					BRA 	End_Program ; it is temporal
 dividir:
 					DIV
-					STA		Result	
+					STA		Result
+					CLRA	; clear the 8 LSB of the dividend
+					DIV		; divide the remainder which is located in the H register , A will have the 8-bits binary fraction of the operation
+					;STA		decimal
+					;convert binary fraction to decimal
+					
+					LDX		#10
+					MUL
+					STX		decimal1  ;Take the 8 most significant bits, they have the first decimal of the operation
+					LDX		#10
+					MUL		;Multiply the 8 least significant bits that are contained in A with #10
+					STX		decimal1 + 1  ; Take the most significant bits, they have the second decimal of the operation
+					
+					
+					CLRX	;Clear X register
+					CLRH	;Clear H register					
 					MOV		Result,PTDD
-					BCLR	0,PTED
-					BRA 	End_Program ; it is temporal				
+					BCLR	0,PTED ; clear the overflow flag
+					BRA 	End_Program ; it is temporal
+	
+	
+									
 			
 sum:
 			LDA		Operand1
