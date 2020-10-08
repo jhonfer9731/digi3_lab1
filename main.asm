@@ -25,8 +25,11 @@ Operand2:        DS.B   1
 Contador3:        DS.B   1
 signoNegativo:		DS.B 1
 Result:			DS.B	1
+cocient:		DS.B	1
+ResultM:		DS.W	1
 decimal1:		DS.W	1
-numeroBCD:		DS.W	1
+pointerBCD:		DS.W	1
+numeroBCD:		DS.B	3
 ;
 ; Secci�n para definir variables en memoria RAM, por fuera de la p�gina cero
 ;
@@ -63,6 +66,7 @@ numeroBCD:		DS.W	1
 		MOV #$FF, PTDDD; set as output port
 		MOV #$00,PTED; port assigned to flags
 		MOV #$FF, PTEDD; set as output port
+		;MOV	$numeroBCD,BCDPointer ; set the address of bcd number to pointer
 ; program body
 
 Inicio: 
@@ -170,10 +174,10 @@ cont_mult:	MUL							;Multiply X * A
 			PSHX						; X to stack
 			PULH						;Load H with X (through stack)
 			TAX							;X<--A
-			STHX	Result				; save result
-			MOV		Result,PTDD			
+			STHX	ResultM				; save result
+			MOV		ResultM,PTDD			
 			BCLR	0,PTED				; no flags
-			BRA 	End_Program
+			BRA 	Display
 sign_mult:
 			MOV		#1,signoNegativo
 			BRA cont_mult
@@ -187,7 +191,7 @@ division:			; it verifies if there are special cases
 					BNE		verificarSi0
 					MOV		Operand1,Result
 					MOV		Operand1,PTDD
-					BRA 	End_Program ; it is temporal
+					JMP 	End_Program ; it is temporal
 verificarSi0:		CMP		#0
 					BNE		verificarCasoOF
 					BSET	1,PTED ; send a flag to the LSB of the port noticing about zero division
@@ -237,6 +241,7 @@ dividir:
 					STX		decimal1 + 1  ; Take the most significant bits, they have the second decimal of the operation
 					
 					
+					
 					CLRX	;Clear X register
 					CLRH	;Clear H register					
 					MOV		Result,PTDD
@@ -267,6 +272,29 @@ operacionCorrecta:
 			BCLR	0,PTED;
 			BRA 	End_Program ; it is temporal
 			
+			
+Display:
+				CLRH
+				LDHX	ResultM
+				TXA		
+				LDHX	#numeroBCD+1		;set the pointer witht the numeroBCD address + 1
+				STHX	pointerBCD
+				
+LoopDisp:		LDX 	#10
+				DIV
+				PSHH
+				PULX
+				STA		cocient
+				TXA		; transfer the remainder to A
+				
+				LDHX	pointerBCD
+				STA		,X ; store the remainder to the address pointed by pointerBCD
+				INC		pointerBCD+1
+				CLRH
+				LDA		cocient
+				CMP		#0
+				BNE		LoopDisp
+				
 
 			
 			
