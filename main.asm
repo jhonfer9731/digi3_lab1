@@ -26,12 +26,13 @@ Contador3:        DS.B   1
 signoNegativo:		DS.B 1
 Result:			DS.B	1
 decimal1:		DS.W	1
+numeroBCD:		DS.W	1
 ;
 ; Secci�n para definir variables en memoria RAM, por fuera de la p�gina cero
 ;
             ;ORG    RAMStart
 
-; Secci�n de c�digo del programa. 
+; Seccion de codigo del programa. 
 		ORG   ROMStart
  _Startup:
 		; Apagar WatchDOG
@@ -107,7 +108,7 @@ LoopOperation:
 			BRCLR	0,PTAD,Delay3 ; branch if the bit 0 of PTAD is cleared (0)
 			BRA		LoopOperation
 Delay3:
-			LDHX	#127; load the inmediate into H:X register		
+			LDHX	#127; load the inmediate into H:X register	
 SigaDelay3:	AIX		#-1; Decrement H:X register
 			CPHX	#0; Compare if it is 0
 			BNE		SigaDelay3; If HX is not 1 continue with de loop
@@ -188,10 +189,18 @@ division:			; it verifies if there are special cases
 					MOV		Operand1,PTDD
 					BRA 	End_Program ; it is temporal
 verificarSi0:		CMP		#0
-					BNE		OperandoSinE
+					BNE		verificarCasoOF
 					BSET	1,PTED ; send a flag to the LSB of the port noticing about zero division
 					BRA 	End_Program ; it is temporal
 					
+verificarCasoOF:	CMP		#-1
+					BNE		OperandoSinE
+					LDX		Operand1
+					CPX		#-128
+					BNE		OperandoSinE; if it is equal, there is overflow in the case -128/-1
+					BSET	0,PTED ; send a flag to the LSB of the port noticing about overflow error
+					BRA 	End_Program ; it is temporal
+						
 				; it executes if there is no special cases
 OperandoSinE:		EOR		Operand1
 					AND		#%10000000
@@ -206,12 +215,12 @@ comprobar2:
 seguirDiv:
 					LDX		Operand2  	;Charge operand2 to X
 					LDA		Operand1	;Charge operand2 to A
-					CMP		#-128  ; verify the case of -128/-1
-					BNE		dividir
-					CPX		#-1
-					BNE		dividir
-					BSET	0,PTED ; send a flag to the LSB of the port noticing about overflow error
-					BRA 	End_Program ; it is temporal
+					;CMP		#-128  ; verify the case of -128/-1
+					;BNE		dividir
+					;CPX		#-1
+					;BNE		dividir
+					;BSET	0,PTED ; send a flag to the LSB of the port noticing about overflow error
+					;BRA 	End_Program ; it is temporal
 dividir:
 					DIV
 					STA		Result
