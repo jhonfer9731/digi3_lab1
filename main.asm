@@ -274,11 +274,12 @@ operacionCorrecta:
 			
 			
 Display:
-				CLRH
-				LDHX	ResultM
-				TXA		
+				
 				LDHX	#numeroBCD+1		;set the pointer witht the numeroBCD address + 1
 				STHX	pointerBCD
+				CLRH
+				LDHX	ResultM
+				TXA	
 				
 LoopDisp:		LDX 	#10
 				DIV
@@ -286,7 +287,7 @@ LoopDisp:		LDX 	#10
 				PULX
 				STA		cocient
 				TXA		; transfer the remainder to A
-				
+				ADD		#48; sum the  ascii code 
 				LDHX	pointerBCD
 				STA		,X ; store the remainder to the address pointed by pointerBCD
 				INC		pointerBCD+1
