@@ -29,7 +29,7 @@ cocient:		DS.B	1
 ResultM:		DS.W	1
 decimal1:		DS.W	1
 pointerBCD:		DS.W	1
-numeroBCD:		DS.B	3
+numeroBCD:		DS.B	6
 ;
 ; Secci�n para definir variables en memoria RAM, por fuera de la p�gina cero
 ;
@@ -143,7 +143,7 @@ subtract:
 			STX		Result			; if not, store the result of the subtraction
 			MOV		Result,PTDD		
 			BCLR	0,PTED;			;flag: no overflow error 
-			JMP 	End_Program ; it is temporal
+			JMP 	setSign
 
 SUB_Overflow:
 			CLR 	Result
@@ -177,7 +177,7 @@ cont_mult:	MUL							;Multiply X * A
 			STHX	ResultM				; save result
 			MOV		ResultM,PTDD			
 			BCLR	0,PTED				; no flags
-			BRA 	Display
+			JMP 	Display
 sign_mult:
 			MOV		#1,signoNegativo
 			BRA cont_mult
@@ -195,7 +195,7 @@ division:			; it verifies if there are special cases
 verificarSi0:		CMP		#0
 					BNE		verificarCasoOF
 					BSET	1,PTED ; send a flag to the LSB of the port noticing about zero division
-					BRA 	End_Program ; it is temporal
+					JMP 	End_Program ; it is temporal
 					
 verificarCasoOF:	CMP		#-1
 					BNE		OperandoSinE
@@ -203,7 +203,7 @@ verificarCasoOF:	CMP		#-1
 					CPX		#-128
 					BNE		OperandoSinE; if it is equal, there is overflow in the case -128/-1
 					BSET	0,PTED ; send a flag to the LSB of the port noticing about overflow error
-					BRA 	End_Program ; it is temporal
+					JMP 	End_Program ; it is temporal
 						
 				; it executes if there is no special cases
 OperandoSinE:		EOR		Operand1
@@ -246,7 +246,7 @@ dividir:
 					CLRH	;Clear H register					
 					MOV		Result,PTDD
 					BCLR	0,PTED ; clear the overflow flag
-					BRA 	End_Program ; it is temporal
+					BRA 	Display 
 	
 	
 									
@@ -263,40 +263,74 @@ sum:
 verificarNegativo:
 			BMI		operacionCorrecta
 			BSET	0,PTED ; send a flag to the LSB of the port noticing about overflow error (because of big negative numbers)
-			BRA 	End_Program ; it is temporal
+			JMP 	End_Program ; it is temporal
 operacionCorrecta:
 			LDA		Operand1
 			ADD		Operand2
 			STA		Result; it modifies the CCR register
 			MOV		Result,PTDD
 			BCLR	0,PTED;
-			BRA 	End_Program ; it is temporal
-			
-			
+setSign:
+			AND #%10000000 
+			BEQ	Display
+			NEGA
+			MOV	#1,signoNegativo
+			STA	Result	
 Display:
-				
-				LDHX	#numeroBCD+1		;set the pointer witht the numeroBCD address + 1
-				STHX	pointerBCD
 				CLRH
-				LDHX	ResultM
-				TXA	
+				MOV 	#2, Contador3
+				LDHX	#numeroBCD+5		;set the pointer witht the numeroBCD address + 2
+				STHX	pointerBCD
+				LDA		PTCD
+				AND		#%00000011
+				CMP		#2
+				BEQ 	Res_Multi
+				LDA		Result
+				CMP		#100
+				BPL		RepeatBCD
+				MOV		#1,Contador3
+				BRA 	RepeatBCD
+
+Res_Multi:		LDHX	ResultM				;result for multi (16 bits) doesnt fit in A
+				TXA		
 				
-LoopDisp:		LDX 	#10
-				DIV
+LoopDispMult:	LDX 	#100
+Rep:			DIV
+				PSHA
 				PSHH
-				PULX
-				STA		cocient
-				TXA		; transfer the remainder to A
-				ADD		#48; sum the  ascii code 
+				PULA
+				CLRH
+				LDX		#10				
+				DIV
+				PSHA
+				PSHH
+				PULA	
+goHere:			LDHX	pointerBCD
+				STA		,X ; store the remainder to the address pointed by pointerBCD
+				DEC		pointerBCD+1
+				PULA
+				DEC		Contador3
+				BNE 	goHere
+				
+				;SEGUNDA PARTE
+				MOV		#2,Contador3
+RepeatBCD:		CLRH
+				LDX		#10
+				DIV
+				PSHA
+				PSHH
+				PULA
 				LDHX	pointerBCD
 				STA		,X ; store the remainder to the address pointed by pointerBCD
-				INC		pointerBCD+1
-				CLRH
-				LDA		cocient
-				CMP		#0
-				BNE		LoopDisp
+				DEC		pointerBCD+1	
+				PULA
+				DEC		Contador3		
+				BEQ		Exit
+				BRA 	RepeatBCD
 				
-
+Exit:			LDHX	pointerBCD
+				STA		,X		;cociente 
+				DEC		pointerBCD+1
 			
 			
 End_Program:
