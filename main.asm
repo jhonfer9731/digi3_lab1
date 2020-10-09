@@ -345,7 +345,14 @@ RepeatBCD:		CLRH
 Exit:			LDHX	pointerBCD
 				STA		,X		;cociente 
 				DEC		pointerBCD+1
-			
+				LDA		signoNegativo
+				AND		#%00000001
+				BEQ		CorrectOperation
+				LDHX	pointerBCD
+				LDA		#45
+				STA		,X	;set the sign in BCD Number at the beginning
+				
+				
 CorrectOperation: 	LDHX 	#CorrectOpMessage
 					STHX	contadorAlerta
 					BRA		RAMPointerAlert
@@ -371,8 +378,7 @@ LoopMessage:		LDHX	contadorAlerta
 					LDHX	contadorMensaje
 					STA		,X
 					AIX		#1
-					STHX	contadorMensaje
-					
+					STHX	contadorMensaje	
 					BRA		LoopMessage
 			
 End_Program:			
