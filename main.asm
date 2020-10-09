@@ -29,9 +29,10 @@ cocient:		DS.B	1
 contadorAlerta: DS.W	1		;pointer to ROM address of alert message
 contadorMensaje:DS.W 	1		;pointer to RAM address of the display message
 ResultM:		DS.W	1
-decimal1:		DS.W	1
 pointerBCD:		DS.W	1
 numeroBCD:		DS.B	6
+puntoDecimal:	DS.B	1
+decimal1:		DS.B	2
 ;
 ; Secci�n para definir variables en memoria RAM, por fuera de la p�gina cero
 ;
@@ -61,6 +62,7 @@ mensajeAlerta:		DS.B	50
 		CLR Result
 		CLR decimal1
 		CLR contadorAlerta
+		MOV	#'.',puntoDecimal
 		MOV #$00,PTAD ; byte with the start (bit 0),Capture_Operand1 (bit 1) and Capture_Operand2 (bit2) signals 
 		MOV #$00,PTADD ; set as input port
 		MOV #$00,PTBD ; port assigned to Operand value
@@ -276,22 +278,22 @@ setSign:
 			MOV	#1,signoNegativo
 			STA	Result	
 Display:
-				CLRH
-				MOV 	#2, Contador3
-				LDHX	#numeroBCD+5		;set the pointer witht the numeroBCD address + 2
-				STHX	pointerBCD
-				LDA		PTCD
+				CLRH						; from here all numbers are unsigned
+				MOV 	#2, Contador3		; initial number of times to iterate into go here
+				LDHX	#numeroBCD+5		
+				STHX	pointerBCD			;set the pointer with the numeroBCD address + 5 ( decimal digit )
+				LDA		PTCD				;check if the performed operation is multiplication
 				AND		#%00000011
 				CMP		#2
-				BEQ 	Res_Multi
-				LDA		Result
+				BEQ 	Res_Multi			;the result of multiplication is inside ResultM and has 16 bits
+				LDA		Result				;the result of any other operation is inside Result and has 8 bits
 				CMP		#100
-				BPL		RepeatBCD
-				MOV		#1,Contador3
+				BPL		RepeatBCD			; check if the range is greater than or equal to 100
+				MOV		#1,Contador3		; if the range is between 0 and 99, Contador3 change from 2 to 1
 				BRA 	RepeatBCD
 
 Res_Multi:		LDHX	ResultM				;result for multi (16 bits) doesnt fit in A
-				CPHX	#100
+				CPHX	#100				
 				BMI		verify		
 				TXA
 				LDX 	#100
@@ -328,16 +330,17 @@ goHere:			LDHX	pointerBCD		;pointer to save the ans
 				BMI		Exit
 				MOV		#1,Contador3
 								
-				;SEGUNDA PARTE
+				;SECOND PART
+				
 RepeatBCD:		CLRH
-				LDX		#10
-				DIV
-				PSHA		;save quotient onto Stack
+				LDX		#10	;
+				DIV			; it divides A / #10
+				PSHA		;save quotient onto Stack, We are going to pull later
 				PSHH		; transfer remainder to A
 				PULA
-				LDHX	pointerBCD
+				LDHX	pointerBCD; load the position of memory pointed by pointerBCD
 				STA		,X ; store the remainder to the address pointed by pointerBCD
-				DEC		pointerBCD+1	
+				DEC		pointerBCD+1; pointer has 16 bits, then it is decremented the LSBs part	
 				PULA			
 				DBNZ		Contador3,RepeatBCD
 
