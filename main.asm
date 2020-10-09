@@ -49,7 +49,7 @@ mensajeAlerta:		DS.B	50
 		LDHX #RAMEnd+1; charge HX with RAMEnd + 1
 		TXS 		; move the value of HX to the stack pointer - 1
 		
-StartAllAgain:
+	StartAllAgain:
 		
 		CLRA		; clear A register
 		CLRX		; clear X register
@@ -196,7 +196,7 @@ division:			; it verifies if there are special cases
 					BNE		verificarSi0
 					MOV		Operand1,Result
 					MOV		Operand1,PTDD
-					JMP 	set_sign ; it is temporal
+					JMP 	setSign ; it is temporal
 verificarSi0:		CMP		#0
 					BNE		verificarCasoOF
 					BSET	1,PTED ; send a flag to the LSB of the port noticing about zero division
@@ -257,7 +257,7 @@ sum:
 			BLT		verificarNegativo ; N xor V = 1, desechar el caso donde N =1 y V = 0
 			BPL		operacionCorrecta
 			BSET	0,PTED ; send a flag to the LSB of the port noticing about overflow error (because of big positive numbers)
-			JMP 	ErrorMessage ; it is temporal
+			JMP 	ErrorMessage ; it is temporal 
 					
 verificarNegativo:
 			BMI		operacionCorrecta
@@ -291,47 +291,61 @@ Display:
 				BRA 	RepeatBCD
 
 Res_Multi:		LDHX	ResultM				;result for multi (16 bits) doesnt fit in A
-				TXA		
+				CPHX	#100
+				BMI		verify		
+				TXA
+				LDX 	#100
+				BRA		LoopDispMult
 				
-LoopDispMult:	LDX 	#100
-Rep:			DIV
-				PSHA
-				PSHH
+verify:
+				TXA
+				CMP		#10
+				BMI		Exit
+				MOV		#1, Contador3
+				BRA		Rep
+				
+LoopDispMult:	
+				DIV
+				PSHA		;save first quotient
+				PSHH		;transfer the  first remainder to A
 				PULA
 				CLRH
-				LDX		#10				
-				DIV
-				PSHA
-				PSHH
+Rep:			LDX		#10				
+				DIV			;divide by 10 the first remainder 
+				PSHA		;save quotient
+				PSHH		;transfer second remainder to A
 				PULA	
-goHere:			LDHX	pointerBCD
-				STA		,X ; store the remainder to the address pointed by pointerBCD
+goHere:			LDHX	pointerBCD		;pointer to save the ans
+				STA		,X 		; store the remainder to the address pointed by pointerBCD
 				DEC		pointerBCD+1
-				PULA
-				DEC		Contador3
-				BNE 	goHere
+				PULA			;load the quocients from Stack onto A		
+				DBNZ 	Contador3,goHere		
 				
-				;SEGUNDA PARTE
 				MOV		#2,Contador3
+				CMP		#100
+				BPL		RepeatBCD
+				CMP		#10
+				BMI		Exit
+				MOV		#1,Contador3
+								
+				;SEGUNDA PARTE
 RepeatBCD:		CLRH
 				LDX		#10
 				DIV
-				PSHA
-				PSHH
+				PSHA		;save quotient onto Stack
+				PSHH		; transfer remainder to A
 				PULA
 				LDHX	pointerBCD
 				STA		,X ; store the remainder to the address pointed by pointerBCD
 				DEC		pointerBCD+1	
-				PULA
-				DEC		Contador3		
-				BEQ		Exit
-				BRA 	RepeatBCD
+				PULA			
+				DBNZ		Contador3,RepeatBCD
+
 				
 Exit:			LDHX	pointerBCD
 				STA		,X		;cociente 
 				DEC		pointerBCD+1
-				
-				
+			
 CorrectOperation: 	LDHX 	#CorrectOpMessage
 					STHX	contadorAlerta
 					BRA		RAMPointerAlert
@@ -361,7 +375,7 @@ LoopMessage:		LDHX	contadorAlerta
 					
 					BRA		LoopMessage
 			
-End_Program:
+End_Program:			
 
 			JMP 	StartAllAgain
 			
