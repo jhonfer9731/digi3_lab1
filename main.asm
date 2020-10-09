@@ -26,6 +26,8 @@ Contador3:        DS.B   1
 signoNegativo:		DS.B 1
 Result:			DS.B	1
 cocient:		DS.B	1
+contadorAlerta: DS.W	1		;pointer to ROM address of alert message
+contadorMensaje:DS.W 	1		;pointer to RAM address of the display message
 ResultM:		DS.W	1
 decimal1:		DS.W	1
 pointerBCD:		DS.W	1
@@ -33,7 +35,8 @@ numeroBCD:		DS.B	6
 ;
 ; Secci�n para definir variables en memoria RAM, por fuera de la p�gina cero
 ;
-            ;ORG    RAMStart
+            ORG    RAMStart
+mensajeAlerta:		DS.B	50
 
 ; Seccion de codigo del programa. 
 		ORG   ROMStart
@@ -46,6 +49,7 @@ numeroBCD:		DS.B	6
 		LDHX #RAMEnd+1; charge HX with RAMEnd + 1
 		TXS 		; move the value of HX to the stack pointer - 1
 		
+StartAllAgain:
 		
 		CLRA		; clear A register
 		CLRX		; clear X register
@@ -56,6 +60,7 @@ numeroBCD:		DS.B	6
 		CLR signoNegativo
 		CLR Result
 		CLR decimal1
+		CLR contadorAlerta
 		MOV #$00,PTAD ; byte with the start (bit 0),Capture_Operand1 (bit 1) and Capture_Operand2 (bit2) signals 
 		MOV #$00,PTADD ; set as input port
 		MOV #$00,PTBD ; port assigned to Operand value
@@ -148,7 +153,7 @@ subtract:
 SUB_Overflow:
 			CLR 	Result
 			BSET	0,PTED ; send a flag to the LSB of the port noticing about overflow error
-			JMP 	End_Program ;
+			JMP 	ErrorMessage ;
 
 
 
@@ -191,11 +196,11 @@ division:			; it verifies if there are special cases
 					BNE		verificarSi0
 					MOV		Operand1,Result
 					MOV		Operand1,PTDD
-					JMP 	End_Program ; it is temporal
+					JMP 	set_sign ; it is temporal
 verificarSi0:		CMP		#0
 					BNE		verificarCasoOF
 					BSET	1,PTED ; send a flag to the LSB of the port noticing about zero division
-					JMP 	End_Program ; it is temporal
+					JMP 	ErrorMessage2 ; it is temporal
 					
 verificarCasoOF:	CMP		#-1
 					BNE		OperandoSinE
@@ -203,7 +208,7 @@ verificarCasoOF:	CMP		#-1
 					CPX		#-128
 					BNE		OperandoSinE; if it is equal, there is overflow in the case -128/-1
 					BSET	0,PTED ; send a flag to the LSB of the port noticing about overflow error
-					JMP 	End_Program ; it is temporal
+					JMP 	ErrorMessage ; it is temporal
 						
 				; it executes if there is no special cases
 OperandoSinE:		EOR		Operand1
@@ -219,18 +224,12 @@ comprobar2:
 seguirDiv:
 					LDX		Operand2  	;Charge operand2 to X
 					LDA		Operand1	;Charge operand2 to A
-					;CMP		#-128  ; verify the case of -128/-1
-					;BNE		dividir
-					;CPX		#-1
-					;BNE		dividir
-					;BSET	0,PTED ; send a flag to the LSB of the port noticing about overflow error
-					;BRA 	End_Program ; it is temporal
 dividir:
 					DIV
 					STA		Result
 					CLRA	; clear the 8 LSB of the dividend
 					DIV		; divide the remainder which is located in the H register , A will have the 8-bits binary fraction of the operation
-					;STA		decimal
+					
 					;convert binary fraction to decimal
 					
 					LDX		#10
@@ -258,12 +257,12 @@ sum:
 			BLT		verificarNegativo ; N xor V = 1, desechar el caso donde N =1 y V = 0
 			BPL		operacionCorrecta
 			BSET	0,PTED ; send a flag to the LSB of the port noticing about overflow error (because of big positive numbers)
-			BRA 	End_Program ; it is temporal
+			JMP 	ErrorMessage ; it is temporal
 					
 verificarNegativo:
 			BMI		operacionCorrecta
 			BSET	0,PTED ; send a flag to the LSB of the port noticing about overflow error (because of big negative numbers)
-			JMP 	End_Program ; it is temporal
+			JMP 	ErrorMessage ; it is temporal
 operacionCorrecta:
 			LDA		Operand1
 			ADD		Operand2
@@ -331,11 +330,50 @@ RepeatBCD:		CLRH
 Exit:			LDHX	pointerBCD
 				STA		,X		;cociente 
 				DEC		pointerBCD+1
-			
+				
+				
+CorrectOperation: 	LDHX 	#CorrectOpMessage
+					STHX	contadorAlerta
+					BRA		RAMPointerAlert
+
+ErrorMessage:		LDHX 	#AlertaOverFlow
+					STHX	contadorAlerta
+					BRA		RAMPointerAlert
+					
+ErrorMessage2:		LDHX 	#AlertaOperacionCero
+					STHX	contadorAlerta
+					BRA		RAMPointerAlert
+
+RAMPointerAlert:
+					LDHX	#mensajeAlerta
+					STHX	contadorMensaje
+					
+LoopMessage:		LDHX	contadorAlerta
+					LDA		,X	; load in A the data in address located at H:X register
+					CMP		#0	; compare if the end-string byte ('\0')
+					BEQ 	End_Program
+					AIX		#1; increment 1 to X (address of alertaOverflow)
+					STHX	contadorAlerta
+					LDHX	contadorMensaje
+					STA		,X
+					AIX		#1
+					STHX	contadorMensaje
+					
+					BRA		LoopMessage
 			
 End_Program:
 
-			BRA 	End_Program
+			JMP 	StartAllAgain
+			
+
+
+AlertaOverFlow: 	DC.B "Error !! hubo sobrecarga en la operacion realizada"
+FinalCadena:		DC.B 0
+AlertaOperacionCero: DC.B "Error !! division por cero no permitida"
+FinalCadena2:		DC.B 0
+CorrectOpMessage: DC.B		"Operacion Correcta"
+FinalCadena3:		DC.B 0
+
 
 ;*                 Interrupt Vectors                          *
 ;**************************************************************
