@@ -174,7 +174,7 @@ subtract:
 			STX		Result			; if not, store the result of the subtraction
 			MOV		Result,PTDD		
 			BCLR	0,PTED;			;flag: no overflow error
-			TXA 
+			TXA
 			JMP 	setSign
 
 SUB_Overflow:
