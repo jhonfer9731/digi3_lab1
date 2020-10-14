@@ -308,12 +308,14 @@ operacionCorrecta:
 setSign:
 			AND #%10000000 
 			BEQ	Display
+			LDA Result
 			NEGA
 			MOV	#1,signoNegativo
 			STA	Result
 				
 ;BCD DISPLAY
-Display:									
+Display:		
+				LDA		Result							
 				CLRH						; from here all numbers are unsigned
 				MOV 	#2, Contador3		; initial number of times to iterate into go here
 				LDHX	#numeroBCD+5		;set the pointer with the numeroBCD address + 5
