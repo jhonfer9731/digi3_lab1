@@ -30,6 +30,7 @@ contadorAlerta: DS.W	1		;pointer to ROM address of alert message
 contadorMensaje:DS.W 	1		;pointer to RAM address of the display message
 ResultM:		DS.W	1
 pointerBCD:		DS.W	1
+		ORG $00C0
 numeroBCD:		DS.B	6
 puntoDecimal:	DS.B	1
 decimal1:		DS.B	2
@@ -160,33 +161,37 @@ SUB_Overflow:
 
 
 multiplication:
-			CLR Contador3
-			LDA		Operand1
-			BMI		change_sign1
-			BRA		go_mult
+			CLR Contador3				;Cont to know if + (2 or 0) or - (1)
+			LDA		Operand1		
+			BMI		change_sign1		;Change the sign if negative
+			CMP		#0
+			BNE 	go_mult		
+			JMP 	Display			;if 0 finish 
 change_sign1:
 			NEGA
 			INC 	Contador3
 go_mult:	
 			LDX 	Operand2
-			BMI		change_sign2
-			BRA		next_mult		
+			BMI		change_sign2		;verify sign second operand
+			CPX		#0
+			BNE 	next_mult		
+			JMP 	Display			;if 0 finish 
 change_sign2:
 			NEGX
 			INC		Contador3
 	
 next_mult:	BRSET	0,Contador3,sign_mult
-			MOV		#0,signoNegativo
+			MOV		#0,signoNegativo	;if Contador=0 or 2 is positive
 cont_mult:	MUL							;Multiply X * A
-			PSHX						; X to stack
+			PSHX						; X to stack (second operand)
 			PULH						;Load H with X (through stack)
 			TAX							;X<--A
-			STHX	ResultM				; save result
+			STHX	ResultM				; save result (16 bits)
 			MOV		ResultM,PTDD			
-			BCLR	0,PTED				; no flags
+			BCLR	0,PTED				; no flags, ok
 			JMP 	Display
 sign_mult:
-			MOV		#1,signoNegativo
+			MOV		#1,signoNegativo	;;if Contador=1 is negative
 			BRA cont_mult
 
 
@@ -202,7 +207,7 @@ division:			; it verifies if there are special cases
 verificarSi0:		CMP		#0
 					BNE		verificarCasoOF
 					BSET	1,PTED ; send a flag to the LSB of the port noticing about zero division
-					JMP 	ErrorMessage2 ; it is temporal
+					JMP 	ErrorMessage2 
 					
 verificarCasoOF:	CMP		#-1
 					BNE		OperandoSinE
@@ -276,34 +281,36 @@ setSign:
 			BEQ	Display
 			NEGA
 			MOV	#1,signoNegativo
-			STA	Result	
-Display:
+			STA	Result
+				
+;BCD DISPLAY
+Display:									
 				CLRH						; from here all numbers are unsigned
 				MOV 	#2, Contador3		; initial number of times to iterate into go here
-				LDHX	#numeroBCD+5		
-				STHX	pointerBCD			;set the pointer with the numeroBCD address + 5 ( decimal digit )
+				LDHX	#numeroBCD+5		;set the pointer with the numeroBCD address + 5
+				STHX	pointerBCD
 				LDA		PTCD				;check if the performed operation is multiplication
 				AND		#%00000011
 				CMP		#2
-				BEQ 	Res_Multi			;the result of multiplication is inside ResultM and has 16 bits
+				BEQ 	Res_Multi			; if multi go to special case of display(16 bits)
 				LDA		Result				;the result of any other operation is inside Result and has 8 bits
 				CMP		#100
-				BPL		RepeatBCD			; check if the range is greater than or equal to 100
+				BPL		RepeatBCD			;if sum,subtract or division do less operations to display
 				MOV		#1,Contador3		; if the range is between 0 and 99, Contador3 change from 2 to 1
 				BRA 	RepeatBCD
 
 Res_Multi:		LDHX	ResultM				;result for multi (16 bits) doesnt fit in A
-				CPHX	#100				
-				BMI		verify		
-				TXA
+				CPHX	#100				;check if the number bigger than 100
+				BMI		verify
+				TXA							;if not, start from the beggining
 				LDX 	#100
 				BRA		LoopDispMult
 				
 verify:
-				TXA
+				TXA							;if it is not bigger than 100 check if less than 10 to save immediately
 				CMP		#10
 				BMI		Exit
-				MOV		#1, Contador3
+				MOV		#1, Contador3		;if its bigger than 10 and less than 100 do less loops to save the result
 				BRA		Rep
 				
 LoopDispMult:	
@@ -315,45 +322,49 @@ LoopDispMult:
 Rep:			LDX		#10				
 				DIV			;divide by 10 the first remainder 
 				PSHA		;save quotient
-				PSHH		;transfer second remainder to A
+				PSHH		;transfer actual remainder to A
 				PULA	
 goHere:			LDHX	pointerBCD		;pointer to save the ans
+				ADD		#48
 				STA		,X 		; store the remainder to the address pointed by pointerBCD
 				DEC		pointerBCD+1
-				PULA			;load the quocients from Stack onto A		
+				PULA			;load the next quotients from Stack onto A		
 				DBNZ 	Contador3,goHere		
-				
+				;finished saving the least significant units of the result
+				;Continue with the others if they are
 				MOV		#2,Contador3
-				CMP		#100
+				CMP		#100		;check if the quotient(of the very first DIV) is bigger than 100
 				BPL		RepeatBCD
-				CMP		#10
+				CMP		#10			;if not check if its less than 10 go and save result
 				BMI		Exit
-				MOV		#1,Contador3
+				MOV		#1,Contador3	;if its between 10 and 100 do less iterations
 								
-				;SECOND PART
-				
+				;Second part: here is the general display (less iterations for not MUL functions)
 RepeatBCD:		CLRH
-				LDX		#10	;
+				LDX		#10
 				DIV			; it divides A / #10
-				PSHA		;save quotient onto Stack, We are going to pull later
+				PSHA		;save quotient onto Stack.We are going to pull later
 				PSHH		; transfer remainder to A
 				PULA
-				LDHX	pointerBCD; load the position of memory pointed by pointerBCD
-				STA		,X ; store the remainder to the address pointed by pointerBCD
-				DEC		pointerBCD+1; pointer has 16 bits, then it is decremented the LSBs part	
-				PULA			
+				
+				LDHX	pointerBCD
+				ADD		#48
+				STA		,X 		; store the remainder to the address pointed by pointerBCD
+				DEC		pointerBCD+1; pointer has 16 bits, then it is decremented the LSBs part		
+				PULA			;take the next value from stack. In this case the quotient
 				DBNZ		Contador3,RepeatBCD
-
+;finish display
 				
 Exit:			LDHX	pointerBCD
-				STA		,X		;cociente 
+				ADD		#48
+				STA		,X				;store the last quotient
 				DEC		pointerBCD+1
-				LDA		signoNegativo
+				LDA		signoNegativo	;load the flag for negative sign
 				AND		#%00000001
-				BEQ		CorrectOperation
+				BEQ		CorrectOperation	;if its positive finish
 				LDHX	pointerBCD
-				LDA		#45
-				STA		,X	;set the sign in BCD Number at the beginning
+				LDA		#48
+				STA		,X				;if not store the negative '-' in ascii before the number 
 				
 				
 CorrectOperation: 	LDHX 	#CorrectOpMessage
