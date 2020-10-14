@@ -15,7 +15,7 @@
             
             ;def values
 
-;MASK            EQU %00111111 ; No existe en memoria
+RESULTADO_FIN           EQU  $00C0; No existe en memoria
 					
 					
 					
@@ -26,11 +26,13 @@ Contador3:        DS.B   1
 signoNegativo:		DS.B 1
 Result:			DS.B	1
 cocient:		DS.B	1
+contadorChar:	DS.B	1
 contadorAlerta: DS.W	1		;pointer to ROM address of alert message
 contadorMensaje:DS.W 	1		;pointer to RAM address of the display message
 ResultM:		DS.W	1
 pointerBCD:		DS.W	1
-		ORG $00C0
+
+			ORG RESULTADO_FIN
 numeroBCD:		DS.B	6
 puntoDecimal:	DS.B	1
 decimal1:		DS.B	2
@@ -51,19 +53,37 @@ mensajeAlerta:		DS.B	50
 		LDHX #RAMEnd+1; charge HX with RAMEnd + 1
 		TXS 		; move the value of HX to the stack pointer - 1
 		
-	StartAllAgain:
-		
+StartAllAgain:
+
+			MOV	#64,contadorChar
+			LDHX	#RESULTADO_FIN
+			CLR decimal1
+			CLR decimal1+1
+repLimpiar:	LDA  	#32
+			STA		,X
+			INCX
+			DBNZ contadorChar,repLimpiar
+			
+				MOV	#64,contadorChar
+				LDHX 	#RAMStart
+repLimpiar2:	LDA  	#32
+				STA		,X
+				INCX
+				DBNZ contadorChar,repLimpiar2
+			
+			
+		CLR		contadorChar
 		CLRA		; clear A register
 		CLRX		; clear X register
 		CLRH		; clear H register
+		
 		CLR Operand1 ; clear reserved memory positions
 		CLR Operand2
 		CLR Contador3
 		CLR signoNegativo
 		CLR Result
-		CLR decimal1
 		CLR contadorAlerta
-		MOV	#'.',puntoDecimal
+		MOV	#' ',puntoDecimal
 		MOV #$00,PTAD ; byte with the start (bit 0),Capture_Operand1 (bit 1) and Capture_Operand2 (bit2) signals 
 		MOV #$00,PTADD ; set as input port
 		MOV #$00,PTBD ; port assigned to Operand value
@@ -74,7 +94,10 @@ mensajeAlerta:		DS.B	50
 		MOV #$FF, PTDDD; set as output port
 		MOV #$00,PTED; port assigned to flags
 		MOV #$FF, PTEDD; set as output port
-		;MOV	$numeroBCD,BCDPointer ; set the address of bcd number to pointer
+		
+		
+		
+		
 ; program body
 
 Inicio: 
@@ -150,7 +173,8 @@ subtract:
 			BMI		SUB_Overflow	;if z=1 exit
 			STX		Result			; if not, store the result of the subtraction
 			MOV		Result,PTDD		
-			BCLR	0,PTED;			;flag: no overflow error 
+			BCLR	0,PTED;			;flag: no overflow error
+			TXA 
 			JMP 	setSign
 
 SUB_Overflow:
@@ -238,14 +262,19 @@ dividir:
 					DIV		; divide the remainder which is located in the H register , A will have the 8-bits binary fraction of the operation
 					
 					;convert binary fraction to decimal
-					
+					MOV	#'.',puntoDecimal
 					LDX		#10
 					MUL
 					STX		decimal1  ;Take the 8 most significant bits, they have the first decimal of the operation
 					LDX		#10
 					MUL		;Multiply the 8 least significant bits that are contained in A with #10
 					STX		decimal1 + 1  ; Take the most significant bits, they have the second decimal of the operation
-					
+					LDA		decimal1
+					ADD		#48
+					STA		decimal1
+					LDA		decimal1 +1
+					ADD		#48
+					STA		decimal1 +1
 					
 					
 					CLRX	;Clear X register
@@ -346,24 +375,24 @@ RepeatBCD:		CLRH
 				PSHA		;save quotient onto Stack.We are going to pull later
 				PSHH		; transfer remainder to A
 				PULA
-				
+
 				LDHX	pointerBCD
 				ADD		#48
 				STA		,X 		; store the remainder to the address pointed by pointerBCD
-				DEC		pointerBCD+1; pointer has 16 bits, then it is decremented the LSBs part		
+				DEC		pointerBCD+1; pointer has 16 bits, then it is decremented the LSBs part
 				PULA			;take the next value from stack. In this case the quotient
 				DBNZ		Contador3,RepeatBCD
 ;finish display
 				
 Exit:			LDHX	pointerBCD
-				ADD		#48
+				ADD		#48		
 				STA		,X				;store the last quotient
 				DEC		pointerBCD+1
 				LDA		signoNegativo	;load the flag for negative sign
 				AND		#%00000001
 				BEQ		CorrectOperation	;if its positive finish
 				LDHX	pointerBCD
-				LDA		#48
+				LDA		#45
 				STA		,X				;if not store the negative '-' in ascii before the number 
 				
 				
@@ -401,7 +430,7 @@ End_Program:
 			
 
 
-AlertaOverFlow: 	DC.B "Error !! hubo sobrecarga en la operacion realizada"
+AlertaOverFlow: 	DC.B "Error !! Sobrecarga en la operacion realizada"
 FinalCadena:		DC.B 0
 AlertaOperacionCero: DC.B "Error !! division por cero no permitida"
 FinalCadena2:		DC.B 0
